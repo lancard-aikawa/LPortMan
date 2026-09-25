@@ -1,0 +1,129 @@
+name: release
+
+# タグを打つ = リリース。バージョンはタグが正で、コード側 (pyproject.toml /
+# src/lportman/__init__.py) と食い違っていたらビルドせずに落とす。
+#   git tag v0.1.0 && git push origin v0.1.0
+#
+# workflow_dispatch で手動実行するとビルドと検証だけ行い、成果物は
+# Actions の artifact に置く (Release は作らない)。
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+
+      - name: バージョンを決める (タグとコードの一致を検査)
+        id: version
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $init = (Select-String -Path src/lportman/__init__.py -Pattern '^__version__\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
+          $proj = (Select-String -Path pyproject.toml -Pattern '^version\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
+          Write-Host "__init__.py : $init"
+          Write-Host "pyproject   : $proj"
+          if ($init -ne $proj) {
+            throw "pyproject.toml ($proj) と src/lportman/__init__.py ($init) のバージョンが違います"
+          }
+          if ('${{ github.ref_type }}' -eq 'tag') {
+            $tag = '${{ github.ref_name }}'
+            $want = $tag -replace '^v', ''
+            if ($want -ne $init) {
+              throw "タグ $tag はバージョン $want を意味しますが、コードは $init です。両方バンプしてからタグを打ち直してください"
+            }
+          }
+          "version=$init" >> $env:GITHUB_OUTPUT
+          "zip=LPortMan-$init-win-x64.zip" >> $env:GITHUB_OUTPUT
+
+      - name: テスト
+        run: |
+          uv sync --locked --all-groups
+          uv run pytest -q
+
+      - name: ビルド
+        run: ./packaging/build.ps1
+
+      - name: exe を起動して確認する
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dir = Join-Path $PWD 'dist/LPortMan'
+          $cli = Join-Path $dir 'lportman.exe'
+          if (-not (Test-Path (Join-Path $dir 'lportmanw.exe'))) { throw "lportmanw.exe (画面) がありません" }
+
+          # データは一時フォルダへ (配布物の dist に data/ を作らない)
+          $env:LPORTMAN_DATA = Join-Path $env:RUNNER_TEMP 'lportman-data'
+
+          $ver = (& $cli --version).Trim()
+          Write-Host "version: $ver"
+          if ($ver -ne 'lportman ${{ steps.version.outputs.version }}') {
+            throw "exe が返すバージョン ($ver) が想定と違います"
+          }
+
+          # 凍結すると壊れやすいのは、psutil (待ち受けの取得) と netsh の読み取り
+          & $cli scan
+          if ($LASTEXITCODE -ne 0) { throw "scan が失敗しました ($LASTEXITCODE)" }
+          $ports = & $cli suggest 5173 --json | ConvertFrom-Json
+          Write-Host "suggest: $($ports -join ', ')"
+          if (@($ports).Count -lt 1) { throw "suggest が候補を返しません" }
+          if (-not (Test-Path (Join-Path $env:LPORTMAN_DATA 'ports.json'))) { throw "ports.json が作られていません" }
+          if (Test-Path (Join-Path $dir 'data')) { throw "配布物に data/ が作られています" }
+
+      - name: zip を作る
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Copy-Item LICENSE, README.md dist/LPortMan/
+          Compress-Archive -Path dist/LPortMan -DestinationPath 'dist/${{ steps.version.outputs.zip }}'
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.version.outputs.zip }}
+          path: dist/${{ steps.version.outputs.zip }}
+
+      # 本文は「その版の変更点」(CHANGELOG.md) + 「初めての方へ」(packaging/release-intro.md)
+      - name: Release の本文を組み立てる
+        if: github.ref_type == 'tag'
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = '${{ steps.version.outputs.version }}'
+          $lines = Get-Content CHANGELOG.md
+          $at = ($lines | Select-String -Pattern "^##\s+$([regex]::Escape($version))\s*$").LineNumber
+          if (-not $at) {
+            throw "CHANGELOG.md に $version の節がありません。変更点を書いてからタグを打ち直してください"
+          }
+          $rest = $lines[$at..($lines.Count - 1)]
+          $end = ($rest | Select-String -Pattern '^##\s' | Select-Object -First 1).LineNumber
+          $body = if ($end) { $rest[0..($end - 2)] } else { $rest }
+          $body = ($body -join "`n").Trim()
+          if (-not $body) { throw "CHANGELOG.md の $version の節が空です" }
+          $intro = (Get-Content packaging/release-intro.md -Raw) -replace '(?s)<!--.*?-->', ''
+          Set-Content -Path dist/release-body.md -Encoding utf8 -Value @(
+            "## $version の変更点", '', $body, '', $intro.Trim()
+          )
+
+      - name: Release を作る (ドラフト)
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create '${{ github.ref_name }}' 'dist/${{ steps.version.outputs.zip }}' `
+            --title 'LPortMan ${{ steps.version.outputs.version }}' `
+            --notes-file dist/release-body.md `
+            --draft

@@ -1,0 +1,15 @@
+# 変更履歴
+
+<!-- 見出しは `## <版番号>` の形にすること (release.yml がこの節を Release の本文に使う) -->
+
+## 0.1.0
+
+最初の公開版。
+
+- 設定ファイル (package.json / vite.config / firebase.json / docker compose / .env / pyproject.toml) からポートを調査
+- 待ち受け中のポートとプロセス・プロジェクトの突き合わせ (WSL / Docker の中継、Claude Code IDE 連携のポートを識別)
+- Windows のポート除外範囲・動的範囲の確認
+- 台帳 (予約) と、予約したポートがプロジェクトの設定に反映されたかの追跡
+- 衝突の解消案 (提案のみ) と、画面からの一括予約
+- 画面: 一覧 / グラフ (衝突マトリクス・ポート分布) / 稼働状況の自動更新 / プロセスの終了 / 新着 / 設定
+- AI エージェント向けの `ports.json` と CLI (scan / list / check / suggest / reserve / plan / link)
