@@ -209,6 +209,7 @@ class App:
         self.root.after(100, self.poll_queue)
         self._mtimes: dict[Any, float] = {}
         self.live_busy = False
+        self._first_run_shown = False
         self.start_scan()
         self.root.after(1000, self.watch_files)
         self.root.after(LIVE_INTERVAL_MS, self.live_tick)
@@ -319,12 +320,11 @@ class App:
                     self.report = payload
                     self.refresh_views()
                     if not payload.config.get("roots"):
-                        # 初回: 調べるフォルダが未設定なら設定タブへ案内する
-                        self.nb.select(self.tab_settings)
-                        self.settings_msg.configure(
-                            text="まず「調べるフォルダ」を追加して「保存して再スキャン」を押してください。",
-                            foreground="#8a5a00")
-                        self.status.set("調べるフォルダが未設定です (設定タブ)")
+                        self.guide_to_settings()
+                        if not self._first_run_shown:
+                            # 初回: 調べるフォルダが未設定なら、最初の設定のダイアログを出す
+                            self._first_run_shown = True
+                            FirstRunDialog(self)
                 else:
                     self.status.set("スキャン失敗")
                     messagebox.showerror("LPortMan", payload)
@@ -858,6 +858,13 @@ class App:
                     row=i, column=1, sticky=tk.W, padx=6)
         self.load_settings()
 
+    def guide_to_settings(self) -> None:
+        self.nb.select(self.tab_settings)
+        self.settings_msg.configure(
+            text="まず「調べるフォルダ」を追加して「保存して再スキャン」を押してください。",
+            foreground="#8a5a00")
+        self.status.set("調べるフォルダが未設定です (設定タブ)")
+
     def load_settings(self) -> None:
         cfg = store.load_config()
         self._cfg = cfg
@@ -1001,6 +1008,145 @@ class App:
             "missing": f"{store.LINK_DIR} 未作成 (lportman link)",
         }.get(st, f"{store.LINK_DIR}: {st}")
         self.link_label.configure(text=text)
+
+
+def find_dev_folders() -> list[tuple[str, int]]:
+    """よくある開発用フォルダのうち、実在して git リポジトリを含むもの。(パス, リポジトリ数)"""
+    home = os.path.expanduser("~")
+    cands = [
+        os.path.join(home, "source", "repos"), os.path.join(home, "repos"), os.path.join(home, "src"),
+        os.path.join(home, "dev"), os.path.join(home, "projects"), os.path.join(home, "workspace"),
+        os.path.join(home, "Documents", "GitHub"), os.path.join(home, "Documents", "Projects"),
+    ]
+    for drive in ("C", "D", "E", "F"):
+        cands += [f"{drive}:\\{name}" for name in ("Repos", "repos", "src", "dev", "projects", "work", "workspace")]
+    out: list[tuple[str, int]] = []
+    seen: set[str] = set()
+    for c in cands:
+        key = os.path.normcase(c)
+        if key in seen or not os.path.isdir(c):
+            continue
+        seen.add(key)
+        n = 0
+        try:
+            for e in os.scandir(c):  # 直下と、その 1 つ下まで (C:\Repos\group\repo の形も多い)
+                if not e.is_dir() or e.name.startswith("."):
+                    continue
+                if os.path.exists(os.path.join(e.path, ".git")):
+                    n += 1
+                    continue
+                try:
+                    n += sum(1 for f in os.scandir(e.path)
+                             if f.is_dir() and os.path.exists(os.path.join(f.path, ".git")))
+                except OSError:
+                    pass
+        except OSError:
+            continue
+        if n:
+            out.append((os.path.normpath(c), n))
+    return out
+
+
+class FirstRunDialog:
+    """初回 (調べるフォルダが未設定) に出す。何をするツールかと、最初に決めることを案内する。"""
+
+    def __init__(self, app: App) -> None:
+        self.app = app
+        win = self.win = tk.Toplevel(app.root)
+        win.title("LPortMan へようこそ")
+        win.transient(app.root)
+        win.resizable(True, True)
+        win.minsize(560, 360)
+
+        # フッターを先に
+        bar = ttk.Frame(win)
+        bar.pack(side=tk.BOTTOM, fill=tk.X, padx=12, pady=10)
+        ttk.Button(bar, text="あとで", command=self.later).pack(side=tk.RIGHT)
+        self.start_btn = ttk.Button(bar, text="開始 (保存してスキャン)", command=self.start)
+        self.start_btn.pack(side=tk.RIGHT, padx=(0, 6))
+        ttk.Button(bar, text="フォルダを追加...", command=self.add_folder).pack(side=tk.LEFT)
+        self.msg = ttk.Label(win, foreground="#8a1c1c", padding=(12, 0))
+        self.msg.pack(side=tk.BOTTOM, fill=tk.X)
+
+        body = ttk.Frame(win, padding=(16, 14, 16, 4))
+        body.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+        ttk.Label(body, text="調べるフォルダを選んでください", font=("", 12, "bold")).pack(anchor=tk.W)
+        ttk.Label(body, justify=tk.LEFT, wraplength=620, foreground="#52514e", text=(
+            "LPortMan は、指定したフォルダの下にあるプロジェクトの設定ファイル (package.json、"
+            "firebase.json、docker-compose.yml、.env など) を読んで、どのプロジェクトがどのポートを使うかを"
+            "一覧にします。プロジェクトのファイルには書き込みません。\n\n"
+            "普段リポジトリを置いているフォルダ (例: C:\\Repos) を選んでください。"
+            "複数選べます。あとから設定タブで変更できます。"
+        )).pack(anchor=tk.W, pady=(6, 10), fill=tk.X)
+
+        ttk.Label(body, text="見つかった開発用フォルダ:").pack(anchor=tk.W)
+        self.list_frame = ttk.Frame(body)
+        self.list_frame.pack(anchor=tk.W, fill=tk.X, pady=(4, 0))
+        self.vars: list[tuple[str, tk.BooleanVar]] = []
+        for path, n in find_dev_folders():
+            self._add_row(path, f"git リポジトリ {n} 件", checked=True)
+        if not self.vars:
+            self.empty = ttk.Label(self.list_frame, foreground="#898781",
+                                   text="(見つかりませんでした。「フォルダを追加...」で選んでください)")
+            self.empty.pack(anchor=tk.W)
+
+        win.bind("<Escape>", lambda e: self.later())
+        win.protocol("WM_DELETE_WINDOW", self.later)
+        win.update_idletasks()
+        # 親ウィンドウの中央に出す
+        x = app.root.winfo_rootx() + (app.root.winfo_width() - win.winfo_reqwidth()) // 2
+        y = app.root.winfo_rooty() + (app.root.winfo_height() - win.winfo_reqheight()) // 3
+        win.geometry(f"+{max(x, 0)}+{max(y, 0)}")
+        win.grab_set()
+        win.focus_set()
+
+    def _add_row(self, path: str, note: str, checked: bool) -> None:
+        if getattr(self, "empty", None) is not None:
+            self.empty.destroy()
+            self.empty = None
+        var = tk.BooleanVar(value=checked)
+        row = ttk.Frame(self.list_frame)
+        row.pack(anchor=tk.W, fill=tk.X, pady=1)
+        ttk.Checkbutton(row, text=path, variable=var).pack(side=tk.LEFT)
+        ttk.Label(row, text=f"  {note}", foreground="#898781").pack(side=tk.LEFT)
+        self.vars.append((path, var))
+
+    def add_folder(self) -> None:
+        d = filedialog.askdirectory(parent=self.win, title="調べるフォルダを選ぶ")
+        if not d:
+            return
+        d = os.path.normpath(d)
+        for path, var in self.vars:
+            if os.path.normcase(path) == os.path.normcase(d):
+                var.set(True)
+                return
+        self._add_row(d, "追加したフォルダ", checked=True)
+        self.msg.configure(text="")
+
+    def start(self) -> None:
+        chosen = [p for p, v in self.vars if v.get()]
+        if not chosen:
+            self.msg.configure(text="フォルダを 1 つ以上選んでください (「フォルダを追加...」で選べます)。")
+            return
+        cfg = store.load_config()
+        used = {r.get("label") for r in cfg.get("roots", [])}
+        for path in chosen:
+            label = os.path.basename(path.rstrip("\\")) or path[:1]
+            base, i = label, 2
+            while label in used:  # 名前 (label) は ports.json でパスを伏せるときに使うので重複させない
+                label, i = f"{base}{i}", i + 1
+            used.add(label)
+            cfg.setdefault("roots", []).append({"path": path, "label": label, "tier": "normal", "mask_paths": False})
+        store.save_json(store.CONFIG_FILE, cfg)
+        self.app._mtimes[store.CONFIG_FILE] = store.CONFIG_FILE.stat().st_mtime  # 自分の保存で二重スキャンしない
+        self.win.destroy()
+        self.app.load_settings()
+        self.app.nb.select(self.app.tab_graph)
+        self.app.start_scan()
+
+    def later(self) -> None:
+        self.win.destroy()
+        self.app.guide_to_settings()
 
 
 class ReserveDialog:
