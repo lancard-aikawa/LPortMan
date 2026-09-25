@@ -68,6 +68,8 @@ lportman suggest 5173             # 空きの候補。既定ポートを渡す�
 lportman reserve 15173 --name "MyApp dev" --project "C:\Repos\MyApp"   # 台帳に予約 (使用不可なら拒否)
 lportman unreserve 15173 --name "MyApp dev"
 lportman plan                     # 衝突の解消案 (提案のみ) を data\plan.md に出力
+lportman project [フォルダ]        # そのプロジェクトのポート・衝突・台帳の反映状況 (既定: 今のフォルダ)
+lportman claude-md [--write FILE] # AI エージェント向けの CLAUDE.md の節を出力 / 書き込み
 lportman link                     # %USERPROFILE%\.lportman のジャンクションを作る
 lportman gui                      # 画面
 ```
@@ -77,20 +79,24 @@ lportman gui                      # 画面
 ## Claude Code などと組み合わせる
 
 AI エージェントに新しいプロジェクトを作らせると、既定の 5173 や 3000 のまま使い始めがちです。
-例えば `CLAUDE.md` に次のように書いておくと、ポートを決める前に LPortMan を確認させられます。
+`lportman claude-md` で、エージェント向けの指示 (CLAUDE.md の節) を作れます。コマンドのパスは
+入れ方 (exe / uv tool / ソース) に合わせて埋められ、`%USERPROFILE%\.lportman` のジャンクションも
+無ければ作られます。
 
-````markdown
-## ローカルのポート
+```
+lportman claude-md                               # 内容を画面に出す
+lportman claude-md --write ~/.claude/CLAUDE.md   # 全プロジェクト共通の CLAUDE.md に書き込む
+```
 
-開発サーバ・エミュレータ・docker compose のポートを新しく決める / 変える前に確認すること。
+`--write` は目印のコメントで囲んだ節として書き込み、2 回目からはその節だけを差し替えます
+(ほかの内容には触りません)。LPortMan を移動・入れ直したときは、もう一度実行してください。
 
-- 一覧: `%USERPROFILE%\.lportman\ports.json`
-- 候補: `lportman suggest <既定ポート>` / 確認: `lportman check <port>` (使用不可なら終了コード 1)
-- 決めたら `lportman reserve <port> --name "<用途>" --project "<フォルダ>"` で台帳に登録する
-- 既存プロジェクトのポートは勝手に変えない。変えるときは `lportman plan` の解消案を示して相談する
-````
+書き込まれる指示の要点:
 
-`ports.json` の `about` には、その環境で CLI を呼ぶためのコマンドが書かれています。
+- 新しくポートを決めるときは `suggest` で候補を取り、設定ファイルに明記し、`reserve` で台帳に登録する
+- 作業を始めるときは `lportman project <フォルダ>` で、そのプロジェクトのポート・衝突・台帳の反映状況を見る
+- 起動が「ポートが使用中」で失敗したら `check` で持ち主を調べる (プロセスは勝手に終了しない)
+- 既存プロジェクトのポートは勝手に変えず、`plan` の解消案を示して相談する
 
 ## データ (`data\`)
 

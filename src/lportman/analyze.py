@@ -87,6 +87,11 @@ def _norm(p: str) -> str:
     return os.path.normcase(os.path.normpath(p))
 
 
+def norm_path(p: str) -> str:
+    """パスの比較用 (大文字小文字・区切りを揃える)。"""
+    return _norm(p)
+
+
 # コンテナのポートを Windows 側で代理待ち受けするプロセス
 DOCKER_RELAYS = {"wslrelay.exe", "com.docker.backend.exe", "vpnkit.exe", "docker-proxy.exe"}
 
@@ -99,6 +104,11 @@ def _project_containing(path: str, projects: list[scanner.Project]) -> scanner.P
         if (target == pp or target.startswith(pp + os.sep)) and (best is None or len(pp) > len(_norm(best.path))):
             best = proj
     return best
+
+
+def project_containing(path: str, projects: list[scanner.Project]) -> scanner.Project | None:
+    """path を含む (または path に等しい) プロジェクトのうち、最も深いもの。"""
+    return _project_containing(path, projects)
 
 
 def is_relay(listener: live.Listener) -> bool:

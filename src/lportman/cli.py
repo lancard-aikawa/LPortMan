@@ -7,6 +7,8 @@
   lportman reserve <port> --name N [--project P] [--note T]   台帳に予約を追加
   lportman unreserve <port> --name N                           台帳から予約を削除
   lportman plan [--out FILE] 衝突の解消案 (提案のみ) を Markdown で出力
+  lportman project [DIR]     そのプロジェクトのポート・衝突・台帳の反映状況 (既定: 今のフォルダ)
+  lportman claude-md [--write FILE]   AI エージェント向けの CLAUDE.md の節を出力 / 書き込み
   lportman link              %USERPROFILE%\\.lportman -> data/ のジャンクション作成
   lportman gui               画面を開く
 """
@@ -15,9 +17,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+from pathlib import Path
 
-from lportman import __version__, analyze, plan, store
+from lportman import __version__, analyze, claude_md, plan, store
 
 
 def _print_json(data: object) -> None:
@@ -116,6 +120,65 @@ def cmd_plan(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_project(args: argparse.Namespace) -> int:
+    report = analyze.run_and_save()
+    target = os.path.abspath(args.dir or os.getcwd())
+    proj = analyze.project_containing(target, report.projects)
+    if proj is None:
+        msg = (f"{target} はポートを宣言しているプロジェクトとして見つかりません。"
+               "調べるフォルダ (config.json の roots) の外か、ポートを書いた設定ファイルがありません。")
+        if args.json:
+            _print_json({"project": None, "message": msg})
+        else:
+            print(msg)
+        return 1
+    key = analyze.norm_path(proj.path)
+    ports = []
+    for f in proj.findings:
+        pi = report.ports.get(f.port)
+        others = sorted({u.project.name if u.project else "(台帳)" for u in (pi.uses if pi else [])
+                         if u.party != key and u.kind != "ref"})
+        ports.append({
+            "port": f.port, "service": f.service, "kind": f.kind, "file": f.file, "detail": f.detail,
+            "severity": pi.severity if pi else None,
+            "notes": [c.message for c in (pi.conflicts if pi else [])],
+            "shared_with": others,
+            "live": [f"{x.process} (PID {x.pid})" for x in (pi.live if pi else [])],
+        })
+    regs = [e for e in report.registry_status if e["project"] and analyze.norm_path(e["project"]) == key]
+    if args.json:
+        _print_json({"project": proj.name, "path": proj.path, "tier": proj.tier, "ports": ports, "registry": regs})
+        return 0
+    print(f"{proj.name}  ({proj.path})")
+    print()
+    print("ポート:")
+    for p in ports:
+        sev = analyze.SEVERITY_LABEL.get(p["severity"] or "", "-")
+        live = f"  稼働: {', '.join(p['live'])}" if p["live"] else ""
+        print(f"  {p['port']:>5} [{sev}] {analyze.KIND_LABEL[p['kind']]}  {p['service']}  ({p['file']}){live}")
+        for n in p["notes"]:
+            print(f"          ! {n}")
+    print()
+    if regs:
+        print("台帳:")
+        for e in regs:
+            print(f"  {e['port']:>5}  {e['name']}  {analyze.REG_STATUS_LABEL.get(e['status'], '')}  {e['message']}")
+    else:
+        print("台帳: 予約なし (新しいポートは lportman suggest で決めて lportman reserve で登録する)")
+    return 0
+
+
+def cmd_claude_md(args: argparse.Namespace) -> int:
+    if store.link_status() == "missing":
+        # エージェントに固定のパスで ports.json を読ませるため、ジャンクションを先に作る
+        print(store.make_link(), file=sys.stderr)
+    if args.write:
+        print(claude_md.write(Path(os.path.expandvars(os.path.expanduser(args.write)))))
+    else:
+        sys.stdout.write(claude_md.render())
+    return 0
+
+
 def cmd_link(args: argparse.Namespace) -> int:
     print(store.make_link())
     return 0
@@ -169,6 +232,15 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("plan", help="衝突の解消案 (提案のみ)")
     p.add_argument("--out", help="出力先 (既定: data/plan.md、- で標準出力)")
     p.set_defaults(func=cmd_plan)
+
+    p = sub.add_parser("project", help="そのプロジェクトのポート・衝突・台帳の反映状況")
+    p.add_argument("dir", nargs="?", help="プロジェクトのフォルダ (既定: 今のフォルダ)")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_project)
+
+    p = sub.add_parser("claude-md", help="AI エージェント向けの CLAUDE.md の節を出力 / 書き込み")
+    p.add_argument("--write", metavar="FILE", help="書き込む CLAUDE.md (例: ~/.claude/CLAUDE.md)。既存の節は差し替える")
+    p.set_defaults(func=cmd_claude_md)
 
     p = sub.add_parser("link", help="%%USERPROFILE%%\\.lportman のジャンクション作成")
     p.set_defaults(func=cmd_link)

@@ -1,6 +1,6 @@
 [project]
 name = "lportman"
-version = "0.1.0"
+version = "0.2.0"
 description = "Local Port Manager: ローカル開発で使うポートの調査・台帳・衝突検出"
 requires-python = ">=3.12"
 dependencies = [
