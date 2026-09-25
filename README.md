@@ -163,7 +163,7 @@ lportman claude-md --write ~/.claude/CLAUDE.md   # 全プロジェクト共通�
 uv sync
 uv run pytest -q                       # テスト
 ./packaging/build.ps1                  # exe のビルド (dist\LPortMan\)
-uv run python tools/manual_shots.py    # マニュアルの画面画像を撮る (docs\images\、git 管理外)
+uv run python tools/manual_shots.py    # マニュアルの画面画像をデモ環境で撮る (docs\images\)
 ```
 
 リリースはタグを打つと GitHub Actions がビルドして、ドラフトの Release を作ります

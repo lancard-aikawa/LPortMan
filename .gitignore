@@ -1,8 +1,8 @@
 # 台帳・調査結果 (マシン固有。%USERPROFILE%\.lportman からジャンクションで参照される)
 /data/
 
-# マニュアルの画面画像 (実際のプロジェクト名・パスが写るため)。tools/manual_shots.py で作り直す
-/docs/images/
+# 自分の環境で撮ったマニュアル画像 (tools/manual_shots.py --real。実際のプロジェクト名・パスが写る)
+/docs/images-local/
 
 # 個人の構想メモ (私的なプロジェクトのパスを含む)
 /develop.txt

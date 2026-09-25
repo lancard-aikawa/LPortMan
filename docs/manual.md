@@ -7,8 +7,8 @@ LPortMan (Local Port Manager) は、ローカル開発で使うポートを調�
 - LPortMan 自身はポートを使いません (デスクトップアプリ)
 - 結果は `ports.json` に出力され、Claude などの AI エージェントもこれを参照できます
 
-> 画面の画像 (`docs/images/`) は撮った人の環境のプロジェクト名・パスが写るため、リポジトリには入れていません。
-> ソースから動かしている場合は `uv run python tools/manual_shots.py` で自分の環境の画面を撮って作れます
+> 画面の画像は、架空のプロジェクトを並べたデモ環境で撮ったものです (`tools/manual_shots.py`)。
+> 自分の環境の画面で見たいときは `uv run python tools/manual_shots.py --real` で `docs/images-local/` に撮れます
 > (撮影中の 1 分ほどは、マウス・キーボードに触らないこと)。
 
 ---
@@ -37,6 +37,8 @@ LPortMan (Local Port Manager) は、ローカル開発で使うポートを調�
 起動するとすぐに調査 (スキャン) が始まり、1 秒ほどで一覧が表示されます。
 
 **初回**は調べるフォルダが未設定なので、「調べるフォルダを選んでください」のダイアログが出ます。
+
+![初回のダイアログ](images/00_firstrun.png)
 
 - よくある開発用フォルダ (`C:\Repos`、`%USERPROFILE%\source\repos`、`Documents\GitHub` など) のうち、
   git リポジトリを含むものが候補としてチェック済みで並びます

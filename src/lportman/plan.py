@@ -182,8 +182,8 @@ def plan_markdown(report: analyze.Report, items: list[PlanItem]) -> str:
             "",
             "```",
             *[
-                f'lportman reserve {c.new_port} --name "{c.finding.service}" --project "{path}"'
-                for c in it.changes
+                f'lportman reserve {port} --name "{service}" --project "{path}"'
+                for port, service in dict((c.new_port, c.finding.service) for c in it.changes).items()
             ],
             "```",
         ]

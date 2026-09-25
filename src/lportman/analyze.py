@@ -300,8 +300,10 @@ def update_seen(report: Report) -> None:
     消えたものも記録は残す (ドライブ未接続などで一時的に消えても、戻ったときに新着扱いしない)。
     """
     data = store.load_seen()
-    first = data is None
     entries: dict[str, str] = dict(data.get("entries", {})) if data else {}
+    # 記録が 1 件も無いうちは初回扱い (調べるフォルダ未設定のまま最初のスキャンが走っても、
+    # あとでフォルダを選んだときに全部が新着にならないように)
+    first = not entries
     now = datetime.now()
     stamp = now.isoformat(timespec="seconds")
     for pi in report.ports.values():

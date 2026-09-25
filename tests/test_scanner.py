@@ -160,3 +160,25 @@ def test_check_port_ignores_own_project(tmp_path: Path) -> None:
     assert analyze.check_port(report, 3210)["status"] == "busy"
     assert analyze.check_port(report, 3210, str(tmp_path))["status"] == "free"  # 自分の宣言は障害でない
     assert analyze.check_port(report, 3210, str(tmp_path / "other"))["status"] == "busy"
+
+
+def test_seen_first_real_scan_is_baseline(tmp_path: Path, monkeypatch) -> None:
+    from lportman import store
+    monkeypatch.setattr(store, "SEEN_FILE", tmp_path / "seen.json")
+    proj = scanner.Project(path=str(tmp_path), name="app", root_label="T", tier="normal", mask=False)
+    use = analyze.Use(3000, "dev", "web", "explicit", "package.json", "", proj, analyze.norm_path(proj.path))
+
+    def report(ports):
+        return analyze.Report(generated_at="", config={"new_days": 7}, projects=[proj], listeners=[], excluded=[],
+                              dynamic=(49152, 65535), ports=ports, conflicts=[], live_owner={})
+
+    empty = report({})  # 調べるフォルダ未設定のままの最初のスキャン
+    analyze.update_seen(empty)
+    first = report({3000: analyze.PortInfo(3000, uses=[use])})  # フォルダを選んだあとのスキャン
+    analyze.update_seen(first)
+    assert first.new_keys == set()  # 既存扱い (新着にしない)
+
+    use2 = analyze.Use(5173, "dev", "vite", "explicit", "package.json", "", proj, analyze.norm_path(proj.path))
+    later = report({3000: analyze.PortInfo(3000, uses=[use]), 5173: analyze.PortInfo(5173, uses=[use2])})
+    analyze.update_seen(later)
+    assert later.new_keys == {f"{analyze.norm_path(proj.path)}|5173"}

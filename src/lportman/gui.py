@@ -708,8 +708,9 @@ class App:
         for it in its:
             for c in it.changes:
                 key = (c.new_port, c.finding.service, it.project.path)
-                if key in existing:
-                    continue
+                if key in existing or any(k[0] == c.new_port and k[2] == it.project.path for k in existing):
+                    continue  # 同じプロジェクトの同じポートは 1 回だけ (compose と .env の両方にある場合など)
+                existing.add(key)
                 store.add_reservation(c.new_port, c.finding.service, it.project.path,
                                       f"解消案 +{it.offset} (元 {c.finding.port})")
                 n += 1

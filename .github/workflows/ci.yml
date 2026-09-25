@@ -1,0 +1,41 @@
+name: ci
+
+# main への push と pull request でテストを流す (exe のビルドは release.yml がタグで行う)
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+
+      - name: テスト
+        run: |
+          uv sync --locked
+          uv run pytest -q
+
+      - name: CLI が起動する
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $env:LPORTMAN_DATA = Join-Path $env:RUNNER_TEMP 'lportman-data'
+          uv run lportman --version
+          uv run lportman scan
+          uv run lportman claude-md | Out-Null
