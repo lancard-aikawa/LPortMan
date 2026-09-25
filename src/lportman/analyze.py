@@ -324,8 +324,13 @@ def refresh_live(report: Report) -> Report:
 # ---------------------------------------------------------------- 空き確認・提案
 
 
-def check_port(report: Report, port: int) -> dict[str, Any]:
-    """status: free (使える) / warn (使えるが注意) / busy (使えない・使うべきでない)"""
+def check_port(report: Report, port: int, own_project: str | None = None) -> dict[str, Any]:
+    """status: free (使える) / warn (使えるが注意) / busy (使えない・使うべきでない)
+
+    own_project を渡すと、そのプロジェクト自身の宣言・待ち受けは障害として数えない
+    (設定にポートを書いてから台帳に予約する、という順で使うため)。
+    """
+    own = _norm(own_project) if own_project else None
     reasons: list[str] = []
     status = "free"
 
@@ -339,6 +344,9 @@ def check_port(report: Report, port: int) -> dict[str, Any]:
         return {"port": port, "status": "busy", "reasons": ["範囲外のポート番号"]}
     for lst in report.listeners:
         if lst.port == port:
+            owner = report.live_owner.get((lst.port, lst.pid))
+            if own and owner and _norm(owner.path) == own:
+                continue
             bump("busy")
             extra = " / 起動ごとに変わる一時ポート。VS Code のウィンドウを開き直せば空く" \
                 if live.CLAUDE_IDE_LABEL in lst.process else ""
@@ -351,6 +359,8 @@ def check_port(report: Report, port: int) -> dict[str, Any]:
         reasons.append("OS の動的ポート範囲内")
     pi = report.ports.get(port)
     for u in pi.uses if pi else []:
+        if own and u.party == own:
+            continue
         who = u.project.name if u.project else "台帳"
         if u.kind in ("explicit", "reserved"):
             bump("busy")

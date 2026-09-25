@@ -146,3 +146,17 @@ def test_registry_status(tmp_path: Path) -> None:
     assert "3000" in st[13000]["message"]  # 旧ポートを示す
     assert st[20000]["status"] == "noproject"
     assert st[20001]["status"] == "missing"
+
+
+def test_check_port_ignores_own_project(tmp_path: Path) -> None:
+    proj = scanner.Project(path=str(tmp_path), name="app", root_label="T", tier="normal", mask=False,
+                           findings=[scanner.Finding(3210, "dev", "web", "explicit", "package.json", "")])
+    other = scanner.Project(path=str(tmp_path / "other"), name="other", root_label="T", tier="normal", mask=False)
+    use = analyze.Use(3210, "dev", "web", "explicit", "package.json", "", proj, analyze.norm_path(proj.path))
+    report = analyze.Report(
+        generated_at="", config={}, projects=[proj, other], listeners=[], excluded=[], dynamic=(49152, 65535),
+        ports={3210: analyze.PortInfo(3210, uses=[use])}, conflicts=[], live_owner={},
+    )
+    assert analyze.check_port(report, 3210)["status"] == "busy"
+    assert analyze.check_port(report, 3210, str(tmp_path))["status"] == "free"  # 自分の宣言は障害でない
+    assert analyze.check_port(report, 3210, str(tmp_path / "other"))["status"] == "busy"

@@ -49,6 +49,16 @@ uv sync
 LPortMan.bat        # 画面 (uv run lportman gui と同じ)
 ```
 
+### 新しい版に上げる
+
+zip を**前の版と同じフォルダに上書きで展開**します (`data\` はそのまま残ります)。
+別のフォルダに展開した場合は、前の版の `data\` を新しいフォルダへ移してから、次を実行します。
+
+```
+lportman.exe link --force                          # %USERPROFILE%\.lportman を新しい場所へ張り直す
+lportman.exe claude-md --write ~/.claude/CLAUDE.md # 使っているなら、CLI のパスを書き直す
+```
+
 ## 最初にやること
 
 1. 画面を開くと、初回は「調べるフォルダを選んでください」のダイアログが出ます。

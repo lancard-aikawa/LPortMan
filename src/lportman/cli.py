@@ -88,7 +88,7 @@ def cmd_suggest(args: argparse.Namespace) -> int:
 
 def cmd_reserve(args: argparse.Namespace) -> int:
     report = analyze.build_report()
-    res = analyze.check_port(report, args.port)
+    res = analyze.check_port(report, args.port, args.project)
     if res["status"] == "busy" and not args.force:
         print(f"{args.port} は使用不可のため登録しません (--force で強行):")
         for reason in res["reasons"]:
@@ -180,7 +180,7 @@ def cmd_claude_md(args: argparse.Namespace) -> int:
 
 
 def cmd_link(args: argparse.Namespace) -> int:
-    print(store.make_link())
+    print(store.make_link(force=args.force))
     return 0
 
 
@@ -243,6 +243,7 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(func=cmd_claude_md)
 
     p = sub.add_parser("link", help="%%USERPROFILE%%\\.lportman のジャンクション作成")
+    p.add_argument("--force", action="store_true", help="別のフォルダを指しているジャンクションを張り直す")
     p.set_defaults(func=cmd_link)
 
     p = sub.add_parser("gui", help="画面を開く")

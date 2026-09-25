@@ -1224,12 +1224,9 @@ class ReserveDialog:
         if port is None:
             self.msg.set("ポート番号を数字で入力してください。")
             return None
-        res = analyze.check_port(self.app.report, port)  # type: ignore[arg-type]
-        # 登録先プロジェクト自身の宣言は障害ではない
-        own = self._project_path()
-        own_name = next((p.name for p in self.projects if p.path == own), None)
-        reasons = [x for x in res["reasons"] if not (own_name and f": {own_name} /" in x)]
-        status = res["status"] if reasons else "free"
+        # 登録先プロジェクト自身の宣言・待ち受けは障害ではない
+        res = analyze.check_port(self.app.report, port, self._project_path() or None)  # type: ignore[arg-type]
+        reasons, status = res["reasons"], res["status"]
         head = {"free": "使用可", "warn": "注意", "busy": "使用不可"}[status]
         self.msg.set(f"{port}: {head}" + ("\n" + "\n".join(f"- {x}" for x in reasons) if reasons else ""))
         return {"status": status}

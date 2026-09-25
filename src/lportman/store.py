@@ -79,7 +79,9 @@ def cli_command() -> str:
     if MODE == "exe":
         return f'"{PROJECT_DIR / "lportman.exe"}"'
     if MODE == "source":
-        return f'uv run --project "{PROJECT_DIR}" lportman'
+        # --no-sync: 画面を開いたまま pyproject が変わっていても、同期 (exe の置き換え) で失敗しない。
+        # ソースは editable で入っているので、コードの変更はそのまま反映される
+        return f'uv run --no-sync --project "{PROJECT_DIR}" lportman'
     return "lportman"
 
 
@@ -184,13 +186,22 @@ def link_status() -> str:
     return f"other:{target_s}"
 
 
-def make_link() -> str:
-    """%USERPROFILE%\\.lportman -> data/ のジャンクションを作る。"""
+def make_link(force: bool = False) -> str:
+    """%USERPROFILE%\\.lportman -> data/ のジャンクションを作る。
+
+    force: 別のフォルダを指しているジャンクションを張り直す (版上げで exe の場所が変わったときなど)。
+    消すのはジャンクションだけで、リンク先のデータは消さない。実体のフォルダなら張り直さない。
+    """
     status = link_status()
     if status == "ok":
         return f"既に作成済み: {LINK_DIR} -> {DATA_DIR}"
+    if status.startswith("other:") and force:
+        os.rmdir(LINK_DIR)  # ジャンクションの rmdir はリンクだけを消す (中身は消えない)
+        status = "missing"
     if status != "missing":
-        raise RuntimeError(f"{LINK_DIR} が既に存在します ({status})。確認して手で削除してください。")
+        hint = " (lportman link --force で張り直せます)" if status.startswith("other:") else \
+            " (実体のフォルダなので自動では消しません。中身を確かめて手で移動・削除してください)"
+        raise RuntimeError(f"{LINK_DIR} が既に存在します ({status}){hint}")
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     subprocess.run(
         ["cmd", "/c", "mklink", "/J", str(LINK_DIR), str(DATA_DIR)],
