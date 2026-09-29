@@ -1,0 +1,32 @@
+# Shipnote の設定。Pages の LP (/projects/<slug>/) に出す内容。
+# 書き換えたら `shipnote sync` で反映する。
+
+name = "LPortMan"
+github = "lancard-aikawa/LPortMan"
+# slug = "lportman"   # LP の URL。省略すると name から作る
+
+# 一行の紹介 (トップの一覧と LP の見出し下に出る)
+tagline = "ローカル開発で使うポートを調べて台帳にまとめ、衝突を見つける Windows 用ツール"
+
+# 二〜四文の説明
+description = "プロジェクトが増えると、開発サーバやエミュレータのポートは既定値 (3000 / 5173 / 8080 / 9099 ...) の取り合いになります。しかもブラウザの localStorage / IndexedDB は scheme + host + port ごとに分かれるので、後からポートを変えると保存データも別物になります。LPortMan は、どのプロジェクトがどのポートを使うかを一覧にし、新しいポートを被らない場所から払い出します。調べる対象のプロジェクトのファイルには書き込みません。"
+
+features = [
+  "設定ファイル (package.json、vite.config、firebase.json、docker compose など) からポートを読み取る",
+  "いま待ち受けているポートを、プロセス・プロジェクトと突き合わせる (WSL / Docker の中継も推定)",
+  "Windows のポート除外範囲と動的範囲を確認し、空いて見えても使えないポートを避ける",
+  "台帳 (予約) と、予約が設定に反映されたかの追跡。衝突の解消案は提案のみで、ファイルは変更しない",
+  "AI エージェントが読める ports.json と CLI、tkinter の画面。LPortMan 自身はポートを使わない",
+]
+
+# 動く環境 (例: "Windows 10 / 11")
+platforms = "Windows (x64)"
+
+# リポジトリ内の画像のパス。LP に並ぶ
+screenshots = ["docs/images/03_ports.png", "docs/images/07_conflicts.png", "docs/images/01_graph_matrix.png"]
+
+# false にするとトップの一覧から外す (LP とリリース記録は作る)
+listed = true
+
+# false にすると一覧と LP だけ載せ、リリース記録 (/posts/) は作らない (作ってあったものは消す)
+posts = false
